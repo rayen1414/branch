@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Branch | Obsidian & Gold</title>
+    <link rel="stylesheet" href="branch.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Shell skin: CSS-only overrides for the outer interface. Never touches server JS. -->
+    <style id="branch-shell-skin"></style>
+</head>
+<body>
+
+    <div class="logo" onclick="toggleinterface()" title="Toggle Interface" data-icon="logo"></div>
+
+    <header class="top-bar">
+        <div class="search-container">
+            <input type="text" placeholder="Explore branches...">
+            <button class="search-btn" data-icon="search"></button>
+        </div>
+        <div class="top-actions">
+            <div class="action-item" onclick="toggleMenu('notif-dropdown')" data-icon="bell">
+                <div class="notif-badge">3</div>
+                <div id="notif-dropdown" class="dropdown-menu">
+                    <div class="menu-header">Recent Activity</div>
+                    <div class="menu-item">
+                        <span style="display:block;font-size:11px;color:var(--accent);opacity:0.7;">DESIGN</span>
+                        New branch in <b>UI/UX Assets</b>
+                    </div>
+                    <div class="menu-item">
+                        <span style="display:block;font-size:11px;color:var(--accent);opacity:0.7;">SYSTEM</span>
+                        Update v2.4 successfully applied
+                    </div>
+                    <div class="menu-item"><b>Alex</b> mentioned you in a log</div>
+                </div>
+            </div>
+            <div class="action-item" onclick="toggleMenu('settings-dropdown')" data-icon="settings">
+                <div id="settings-dropdown" class="dropdown-menu">
+                    <div class="menu-header">Preferences</div>
+                    <div class="menu-item">Account Settings</div>
+                    <div class="menu-item">Theme Customization</div>
+                    <div class="menu-item" style="color:#ff4d4d;border-top:1px solid rgba(255,255,255,0.05);margin-top:5px;">Logout</div>
+                </div>
+            </div>
+            <div class="divider"></div>
+            <div class="user-profile">
+                <div class="user-info">
+                    <span class="username">Alex_Indie</span>
+                    <span class="status-text">In a Branch</span>
+                </div>
+                <div class="avatar-frame">
+                    <div class="avatar-status"></div>
+                    <div class="avatar-content" data-icon="user"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <nav class="sidebar" id="main-sidebar">
+        <div class="hide-arrow" onclick="togglebar()">&#x2039;</div>
+        <div class="draggable-zone" id="draggable-zone">
+            <div class="sidebar-item active" draggable="true"
+                 data-id="home"
+                 data-server-name="Dashboard" data-owner="true" data-default="true"
+                 oncontextmenu="openContextMenu(event,this)">
+                <div class="active-pill"></div>
+                <div class="icon-box" data-icon="home"></div>
+            </div>
+            <div class="sidebar-item" draggable="true"
+                 data-id="explore"
+                 data-server-name="Discovery" data-owner="true" data-default="true"
+                 oncontextmenu="openContextMenu(event,this)">
+                <div class="active-pill"></div>
+                <div class="icon-box" data-icon="explore"></div>
+            </div>
+            <div class="sidebar-item" draggable="true"
+                 data-id="media"
+                 data-server-name="Media Library" data-owner="true" data-default="true"
+                 oncontextmenu="openContextMenu(event,this)">
+                <div class="active-pill"></div>
+                <div class="icon-box" data-icon="media"></div>
+            </div>
+        </div>
+        <div class="separator"></div>
+        <div class="sidebar-item plus-btn" onclick="openCreateModal()">
+            <div class="icon-box" data-icon="plus"></div>
+        </div>
+    </nav>
+
+    <main class="main-container">
+        <iframe id="server-iframe" class="server-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
+    </main>
+
+    <!-- RIGHT-CLICK CONTEXT MENU -->
+    <div id="server-context-menu" class="context-menu">
+        <div class="ctx-group ctx-default-only">
+            <div class="context-menu-item context-edit" onclick="openCustomizer()">
+                <span class="ctx-icon">🎨</span>
+                <div><div>Customize</div><div class="ctx-sub">Colors · Font · Background</div></div>
+            </div>
+        </div>
+        <div class="ctx-group ctx-admin-only">
+            <div class="context-menu-item context-edit" onclick="openEditor()">
+                <span class="ctx-icon">✦</span>
+                <div><div>Open Editor</div><div class="ctx-sub">Full HTML · CSS · JS</div></div>
+            </div>
+            <div class="context-menu-item" onclick="closeContextMenu()">
+                <span class="ctx-icon">⚙</span> Server Settings
+            </div>
+        </div>
+        <div class="ctx-group ctx-member-only">
+            <div class="context-menu-item context-edit" onclick="openEditor()">
+                <span class="ctx-icon">🎨</span>
+                <div><div>My Skin</div><div class="ctx-sub">CSS only · Visible only to you</div></div>
+            </div>
+        </div>
+        <div class="context-menu-sep"></div>
+        <div class="context-menu-item" onclick="closeContextMenu()">
+            <span class="ctx-icon">📌</span> Pin to Top
+        </div>
+        <div class="context-menu-item context-danger" onclick="closeContextMenu()">
+            <span class="ctx-icon">🚪</span> Leave Server
+        </div>
+    </div>
+
+    <!-- EDITOR OVERLAY -->
+    <div id="editor-overlay" class="editor-overlay hidden">
+        <div class="ed-topbar">
+            <div class="ed-brand">⬡ Branch</div>
+            <div class="ed-role-badge ed-role-admin" id="ed-badge-admin">ADMIN EDITOR</div>
+            <div class="ed-role-badge ed-role-member" id="ed-badge-member">CUSTOMIZE</div>
+            <div class="ed-server-name" id="ed-server-name">Server</div>
+            <div class="ed-spacer"></div>
+            <!-- Admin mode tabs -->
+            <div class="ed-tab-group" id="ed-mode-tabs">
+                <button class="ed-tab active" onclick="edSetMode(event,'split')">Split</button>
+                <button class="ed-tab" onclick="edSetMode(event,'code')">Code</button>
+                <button class="ed-tab" onclick="edSetMode(event,'preview')">Preview</button>
+            </div>
+            <!-- Member/customize mode tabs -->
+            <div class="ed-tab-group" id="ed-skin-tabs" style="display:none;">
+                <button class="ed-tab active" id="ed-skin-visual-btn" onclick="edSkinSetPanel('visual',this)">🎨 Visual</button>
+                <button class="ed-tab" id="ed-skin-shell-btn" onclick="edSkinSetPanel('shell',this)">🖥 Interface</button>
+                <button class="ed-tab" id="ed-skin-code-btn" onclick="edSkinSetPanel('code',this)">✦ CSS</button>
+            </div>
+            <button class="ed-btn ed-btn-ghost" onclick="edRefresh()" id="ed-refresh-btn">↻ Refresh</button>
+            <button class="ed-btn ed-btn-accent" id="ed-publish-btn" onclick="edPublish()">▲ Publish</button>
+            <button class="ed-btn ed-btn-save"   id="ed-save-btn"    onclick="edPublish()">💾 Save Skin</button>
+            <button class="ed-btn ed-btn-exit" onclick="closeEditor()">✕ Exit</button>
+        </div>
+
+        <div class="ed-workspace">
+
+            <!-- ═══════════════════════════════════════════
+                 VISUAL CUSTOMIZER PANEL (member/default mode)
+                 Fully reworked — reads server CSS vars
+                 ═══════════════════════════════════════════ -->
+            <div class="ed-visual-panel" id="ed-visual-panel" style="display:none;">
+
+                <!-- HEADER -->
+                <div class="cvp-header">
+                    <div class="cvp-title">🎨 Visual Customizer</div>
+                    <div class="cvp-subtitle">Edit this server's CSS visually — changes save to the real server stylesheet</div>
+                </div>
+
+                <div class="cvp-scroll">
+
+                    <!-- COLORS SECTION -->
+                    <div class="cvp-section-label">Colors</div>
+
+                    <div class="cvp-color-row">
+                        <div class="cvp-color-slot">
+                            <label class="cvp-color-label">Accent</label>
+                            <div class="cvp-color-pair">
+                                <input type="color" id="cvp-accent-color" value="#c8ff00"
+                                       oninput="cvpSetAccent(this.value)">
+                                <input type="text" id="cvp-accent-hex" class="cvp-hex-input"
+                                       value="#c8ff00" maxlength="7"
+                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))cvpSetAccent(this.value)">
+                            </div>
+                        </div>
+                        <div class="cvp-color-slot">
+                            <label class="cvp-color-label">Background</label>
+                            <div class="cvp-color-pair">
+                                <input type="color" id="cvp-bg-color" value="#0a0a0f"
+                                       oninput="cvpSetBg(this.value)">
+                                <input type="text" id="cvp-bg-hex" class="cvp-hex-input"
+                                       value="#0a0a0f" maxlength="7"
+                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))cvpSetBg(this.value)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cvp-color-row">
+                        <div class="cvp-color-slot">
+                            <label class="cvp-color-label">Surface</label>
+                            <div class="cvp-color-pair">
+                                <input type="color" id="cvp-surface-color" value="#111118"
+                                       oninput="cvpSetSurface(this.value)">
+                                <input type="text" id="cvp-surface-hex" class="cvp-hex-input"
+                                       value="#111118" maxlength="7"
+                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))cvpSetSurface(this.value)">
+                            </div>
+                        </div>
+                        <div class="cvp-color-slot">
+                            <label class="cvp-color-label">Text</label>
+                            <div class="cvp-color-pair">
+                                <input type="color" id="cvp-text-color" value="#e0e0e8"
+                                       oninput="cvpSetText(this.value)">
+                                <input type="text" id="cvp-text-hex" class="cvp-hex-input"
+                                       value="#e0e0e8" maxlength="7"
+                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))cvpSetText(this.value)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ACCENT PRESETS -->
+                    <div class="cvp-presets">
+                        <div class="cvp-preset" style="background:#c8ff00" onclick="cvpSetAccent('#c8ff00')" title="Neon Lime"></div>
+                        <div class="cvp-preset" style="background:#ff3cac" onclick="cvpSetAccent('#ff3cac')" title="Hot Pink"></div>
+                        <div class="cvp-preset" style="background:#00f5d4" onclick="cvpSetAccent('#00f5d4')" title="Mint"></div>
+                        <div class="cvp-preset" style="background:#ff6b35" onclick="cvpSetAccent('#ff6b35')" title="Fire"></div>
+                        <div class="cvp-preset" style="background:#a78bfa" onclick="cvpSetAccent('#a78bfa')" title="Lavender"></div>
+                        <div class="cvp-preset" style="background:#60a5fa" onclick="cvpSetAccent('#60a5fa')" title="Sky"></div>
+                        <div class="cvp-preset" style="background:#f59e0b" onclick="cvpSetAccent('#f59e0b')" title="Amber"></div>
+                        <div class="cvp-preset" style="background:#d2d2d2" onclick="cvpSetAccent('#d2d2d2')" title="Silver"></div>
+                    </div>
+
+                    <!-- TYPOGRAPHY -->
+                    <div class="cvp-section-label">Typography</div>
+
+                    <div class="cvp-fonts">
+                        <div class="cvp-font-opt sel" data-font="system-ui, sans-serif" onclick="cvpSetFont(this)" style="font-family:system-ui,sans-serif;">Sans</div>
+                        <div class="cvp-font-opt" data-font="Georgia, serif" onclick="cvpSetFont(this)" style="font-family:Georgia,serif;">Serif</div>
+                        <div class="cvp-font-opt" data-font="'Courier New', monospace" onclick="cvpSetFont(this)" style="font-family:'Courier New',monospace;">Mono</div>
+                    </div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Font size</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="cvp-fontsize"
+                                   min="12" max="20" value="14"
+                                   oninput="cvpUpdateSlider('fontsize',this.value,'px')">
+                            <span class="cvp-val" id="cvp-fontsize-val">14px</span>
+                        </div>
+                    </div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Border radius</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="cvp-radius"
+                                   min="0" max="28" value="12"
+                                   oninput="cvpUpdateSlider('radius',this.value,'px')">
+                            <span class="cvp-val" id="cvp-radius-val">12px</span>
+                        </div>
+                    </div>
+
+                    <!-- CARD STYLE -->
+                    <div class="cvp-section-label">Card Style</div>
+                    <div class="cvp-cards">
+                        <div class="cvp-card-opt sel" data-style="default" onclick="cvpSetCardStyle(this)">
+                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.15);border-radius:8px;"></div>
+                            <span>Default</span>
+                        </div>
+                        <div class="cvp-card-opt" data-style="flat" onclick="cvpSetCardStyle(this)">
+                            <div class="cvp-card-preview" style="background:rgba(255,255,255,0.06);border-radius:3px;"></div>
+                            <span>Flat</span>
+                        </div>
+                        <div class="cvp-card-opt" data-style="outline" onclick="cvpSetCardStyle(this)">
+                            <div class="cvp-card-preview" style="border:2px solid rgba(255,255,255,0.3);border-radius:8px;"></div>
+                            <span>Outline</span>
+                        </div>
+                        <div class="cvp-card-opt" data-style="ghost" onclick="cvpSetCardStyle(this)">
+                            <div class="cvp-card-preview" style="border-bottom:1px solid rgba(255,255,255,0.2);border-radius:0;"></div>
+                            <span>Ghost</span>
+                        </div>
+                        <div class="cvp-card-opt" data-style="glass" onclick="cvpSetCardStyle(this)">
+                            <div class="cvp-card-preview" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;backdrop-filter:blur(8px);"></div>
+                            <span>Glass</span>
+                        </div>
+                    </div>
+
+                    <!-- BACKGROUND MODE -->
+                    <div class="cvp-section-label">Background</div>
+                    <div class="cvp-bgs">
+                        <div class="cvp-bg-opt sel" data-mode="solid" onclick="cvpSetBgMode(this)">
+                            <div class="cvp-bg-preview" style="background:#0a0a0f;"></div>
+                            <span>Solid</span>
+                        </div>
+                        <div class="cvp-bg-opt" data-mode="gradient-warm" onclick="cvpSetBgMode(this)">
+                            <div class="cvp-bg-preview" style="background:linear-gradient(135deg,#0e0a00,#1a0d00);"></div>
+                            <span>Warm</span>
+                        </div>
+                        <div class="cvp-bg-opt" data-mode="gradient-cool" onclick="cvpSetBgMode(this)">
+                            <div class="cvp-bg-preview" style="background:linear-gradient(135deg,#000814,#001429);"></div>
+                            <span>Cool</span>
+                        </div>
+                        <div class="cvp-bg-opt" data-mode="gradient-neon" onclick="cvpSetBgMode(this)">
+                            <div class="cvp-bg-preview" style="background:linear-gradient(135deg,#0a000f,#000a0f);"></div>
+                            <span>Neon</span>
+                        </div>
+                        <div class="cvp-bg-opt" data-mode="grid" onclick="cvpSetBgMode(this)">
+                            <div class="cvp-bg-preview" style="background-color:#0a0a0f;background-image:linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px);background-size:10px 10px;"></div>
+                            <span>Grid</span>
+                        </div>
+                        <div class="cvp-bg-opt" data-mode="dots" onclick="cvpSetBgMode(this)">
+                            <div class="cvp-bg-preview" style="background-color:#0a0a0f;background-image:radial-gradient(rgba(255,255,255,.2) 1px,transparent 1px);background-size:8px 8px;"></div>
+                            <span>Dots</span>
+                        </div>
+                    </div>
+
+                    <!-- SPACING -->
+                    <div class="cvp-section-label">Spacing</div>
+                    <div class="cvp-spacings">
+                        <div class="cvp-spacing-opt" data-spacing="compact" onclick="cvpSetSpacing(this)">Compact</div>
+                        <div class="cvp-spacing-opt sel" data-spacing="normal" onclick="cvpSetSpacing(this)">Normal</div>
+                        <div class="cvp-spacing-opt" data-spacing="relaxed" onclick="cvpSetSpacing(this)">Relaxed</div>
+                    </div>
+
+                </div><!-- /cvp-scroll -->
+
+                <!-- FOOTER ACTIONS -->
+                <div class="cvp-footer">
+                    <button class="cvp-btn-secondary" onclick="cvpReset()">↺ Reset</button>
+                    <button class="cvp-btn-secondary" onclick="cvpApplyToEditor()">✦ Edit CSS</button>
+                    <button class="cvp-btn-primary" onclick="edPublish()">💾 Save to Server</button>
+                </div>
+
+            </div><!-- /ed-visual-panel -->
+
+            <!-- ═══════════════════════════════════════════
+                 SHELL / INTERFACE CUSTOMIZER PANEL
+                 Controls layout, sizes, shapes of the
+                 outer Branch interface. CSS-only — never
+                 touches server JS or server content.
+                 ═══════════════════════════════════════════ -->
+            <div class="ed-visual-panel" id="ed-shell-panel" style="display:none;">
+
+                <div class="cvp-header">
+                    <div class="cvp-title">🖥 Interface Customizer</div>
+                    <div class="cvp-subtitle">Move, resize & reshape the Branch shell — CSS only, server JS is always safe</div>
+                </div>
+
+                <div class="cvp-scroll">
+
+                    <!-- TOPBAR -->
+                    <div class="cvp-section-label">Top Bar</div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Bar Height</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="shp-topbar-h"
+                                   min="60" max="140" value="100"
+                                   oninput="shpUpdate('topbar-h',this.value,'px')">
+                            <span class="cvp-val" id="shp-topbar-h-val">100px</span>
+                        </div>
+                    </div>
+
+                    <div class="cvp-color-row">
+                        <div class="cvp-color-slot">
+                            <label class="cvp-color-label">Bar Color</label>
+                            <div class="cvp-color-pair">
+                                <input type="color" id="shp-topbar-bg-color" value="#121217"
+                                       oninput="shpUpdateColor('topbar-bg',this.value)">
+                                <input type="text" id="shp-topbar-bg-hex" class="cvp-hex-input"
+                                       value="#121217" maxlength="7"
+                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))shpUpdateColor('topbar-bg',this.value)">
+                            </div>
+                        </div>
+                        <div class="cvp-color-slot">
+                            <label class="cvp-color-label">Accent Color</label>
+                            <div class="cvp-color-pair">
+                                <input type="color" id="shp-accent-color" value="#d2d2d2"
+                                       oninput="shpUpdateColor('accent',this.value)">
+                                <input type="text" id="shp-accent-hex" class="cvp-hex-input"
+                                       value="#d2d2d2" maxlength="7"
+                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))shpUpdateColor('accent',this.value)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SEARCH BAR -->
+                    <div class="cvp-section-label">Search Bar</div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Width</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="shp-search-w"
+                                   min="200" max="700" value="380"
+                                   oninput="shpUpdate('search-w',this.value,'px')">
+                            <span class="cvp-val" id="shp-search-w-val">380px</span>
+                        </div>
+                    </div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Corner Radius</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="shp-search-radius"
+                                   min="0" max="40" value="12"
+                                   oninput="shpUpdate('search-radius',this.value,'px')">
+                            <span class="cvp-val" id="shp-search-radius-val">12px</span>
+                        </div>
+                    </div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Search Btn Radius</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="shp-search-btn-radius"
+                                   min="0" max="40" value="8"
+                                   oninput="shpUpdate('search-btn-radius',this.value,'px')">
+                            <span class="cvp-val" id="shp-search-btn-radius-val">8px</span>
+                        </div>
+                    </div>
+
+                    <!-- SEARCH POSITION (left / center / right) -->
+                    <div class="cvp-section-label">Search Position</div>
+                    <div class="cvp-spacings">
+                        <div class="cvp-spacing-opt sel" data-pos="center" onclick="shpSetSearchPos(this)">Center</div>
+                        <div class="cvp-spacing-opt" data-pos="left" onclick="shpSetSearchPos(this)">Left</div>
+                        <div class="cvp-spacing-opt" data-pos="right" onclick="shpSetSearchPos(this)">Right</div>
+                    </div>
+
+                    <!-- SIDEBAR -->
+                    <div class="cvp-section-label">Sidebar</div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Width</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="shp-sidebar-w"
+                                   min="70" max="200" value="120"
+                                   oninput="shpUpdate('sidebar-w',this.value,'px')">
+                            <span class="cvp-val" id="shp-sidebar-w-val">120px</span>
+                        </div>
+                    </div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Icon Size</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="shp-icon-size"
+                                   min="40" max="90" value="74"
+                                   oninput="shpUpdate('icon-size',this.value,'px')">
+                            <span class="cvp-val" id="shp-icon-size-val">74px</span>
+                        </div>
+                    </div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Icon Corner Radius</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="shp-icon-radius"
+                                   min="0" max="50" value="18"
+                                   oninput="shpUpdate('icon-radius',this.value,'px')">
+                            <span class="cvp-val" id="shp-icon-radius-val">18px</span>
+                        </div>
+                    </div>
+
+                    <div class="cvp-color-row">
+                        <div class="cvp-color-slot">
+                            <label class="cvp-color-label">Sidebar Color</label>
+                            <div class="cvp-color-pair">
+                                <input type="color" id="shp-sidebar-bg-color" value="#121217"
+                                       oninput="shpUpdateColor('sidebar-bg',this.value)">
+                                <input type="text" id="shp-sidebar-bg-hex" class="cvp-hex-input"
+                                       value="#121217" maxlength="7"
+                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))shpUpdateColor('sidebar-bg',this.value)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- LOGO -->
+                    <div class="cvp-section-label">Logo / Brand</div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Logo Size</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="shp-logo-size"
+                                   min="40" max="100" value="74"
+                                   oninput="shpUpdate('logo-size',this.value,'px')">
+                            <span class="cvp-val" id="shp-logo-size-val">74px</span>
+                        </div>
+                    </div>
+
+                    <div class="cvp-slider-row">
+                        <label class="cvp-slider-label">Logo Corner Radius</label>
+                        <div class="cvp-slider-track">
+                            <input type="range" class="cvp-slider" id="shp-logo-radius"
+                                   min="0" max="50" value="20"
+                                   oninput="shpUpdate('logo-radius',this.value,'px')">
+                            <span class="cvp-val" id="shp-logo-radius-val">20px</span>
+                        </div>
+                    </div>
+
+                    <!-- AVATAR -->
+                    <div class="cvp-section-label">Avatar Shape</div>
+                    <div class="cvp-spacings">
+                        <div class="cvp-spacing-opt sel" data-av="15" onclick="shpSetAvatar(this)">Rounded</div>
+                        <div class="cvp-spacing-opt" data-av="50" onclick="shpSetAvatar(this)">Circle</div>
+                        <div class="cvp-spacing-opt" data-av="4" onclick="shpSetAvatar(this)">Sharp</div>
+                        <div class="cvp-spacing-opt" data-av="0" onclick="shpSetAvatar(this)">Square</div>
+                    </div>
+
+                    <!-- PRESET LAYOUTS -->
+                    <div class="cvp-section-label">Quick Presets</div>
+                    <div class="cvp-cards" style="flex-wrap:wrap;gap:8px;">
+                        <div class="cvp-card-opt" onclick="shpPreset('minimal')" style="flex:1;min-width:80px;">
+                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;font-size:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);">─</div>
+                            <span>Minimal</span>
+                        </div>
+                        <div class="cvp-card-opt" onclick="shpPreset('rounded')" style="flex:1;min-width:80px;">
+                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.1);border-radius:16px;font-size:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);">◉</div>
+                            <span>Rounded</span>
+                        </div>
+                        <div class="cvp-card-opt" onclick="shpPreset('compact')" style="flex:1;min-width:80px;">
+                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.1);border-radius:8px;height:18px;font-size:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);">▬</div>
+                            <span>Compact</span>
+                        </div>
+                        <div class="cvp-card-opt" onclick="shpPreset('wide')" style="flex:1;min-width:80px;">
+                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.1);border-radius:8px;font-size:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);">◫</div>
+                            <span>Wide</span>
+                        </div>
+                    </div>
+
+                </div><!-- /cvp-scroll -->
+
+                <div class="cvp-footer">
+                    <button class="cvp-btn-secondary" onclick="shpReset()">↺ Reset</button>
+                    <button class="cvp-btn-primary" onclick="shpSave()">💾 Save Layout</button>
+                </div>
+
+            </div><!-- /ed-shell-panel -->
+
+            <!-- EDITOR PANEL -->
+            <div class="ed-editor-panel" id="ed-editor-panel">
+                <div class="ed-file-tabs" id="ed-file-tabs">
+                    <div class="ed-file-tab active ed-admin-tab" data-file="html" onclick="edSwitchFile('html',this)"><span class="ed-dot"></span>index.html</div>
+                    <div class="ed-file-tab ed-admin-tab" data-file="css" onclick="edSwitchFile('css',this)"><span class="ed-dot"></span>styles.css</div>
+                    <div class="ed-file-tab ed-admin-tab" data-file="js" onclick="edSwitchFile('js',this)"><span class="ed-dot"></span>app.js</div>
+                    <div class="ed-file-tab ed-member-tab" data-file="skin" onclick="edSwitchFile('skin',this)"><span class="ed-dot"></span>my-skin.css</div>
+                </div>
+                <div id="ed-monaco" style="flex:1;"></div>
+            </div>
+            <div class="ed-resizer" id="ed-resizer"></div>
+
+            <!-- PREVIEW PANEL -->
+            <div class="ed-preview-panel" id="ed-preview-panel">
+                <div class="ed-preview-bar">
+                    <div class="ed-preview-dots">
+                        <span style="background:#ff5f57"></span>
+                        <span style="background:#febc2e"></span>
+                        <span style="background:#28c840"></span>
+                    </div>
+                    <div class="ed-url-bar">🔒 branch.app/s/<span id="ed-url-slug">server</span></div>
+                    <button class="ed-device-btn active" onclick="edSetDevice(event,'desktop')" title="Desktop">🖥</button>
+                    <button class="ed-device-btn" onclick="edSetDevice(event,'mobile')" title="Mobile">📱</button>
+                </div>
+                <div class="ed-local-notice" id="ed-local-notice">
+                    ✎ Editing this server's CSS directly. Click "Save to Server" to apply permanently.
+                </div>
+                <div class="ed-frame-wrap" id="ed-frame-wrap">
+                    <iframe id="ed-iframe" sandbox="allow-scripts"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <div class="ed-statusbar">
+            <span id="ed-status-pos">Ln 1, Col 1</span>
+            <span id="ed-status-lang">CSS</span>
+            <span style="margin-left:auto;" id="ed-status-chars">0 chars</span>
+        </div>
+        <div class="ed-toast" id="ed-toast">✓ Published to everyone</div>
+        <div class="ed-toast" id="ed-toast-save" style="background:#60a5fa;color:#000;">💾 Saved to server CSS</div>
+    </div>
+
+    <!-- CREATE SERVER MODAL -->
+    <div id="create-modal-backdrop" class="modal-backdrop hidden" onclick="handleBackdropClick(event)">
+        <div class="create-modal">
+
+            <div class="modal-step active" id="step-1">
+                <div class="modal-header">
+                    <div class="modal-title">Create a Server</div>
+                    <div class="modal-sub">Your server, your rules. Build anything.</div>
+                </div>
+                <div class="server-type-grid">
+                    <div class="server-type-card selected" onclick="selectType(this,'scratch')">
+                        <div class="type-icon">✦</div>
+                        <div class="type-name">From Scratch</div>
+                        <div class="type-desc">Blank canvas. You code everything.</div>
+                    </div>
+                    <div class="server-type-card" onclick="selectType(this,'template')">
+                        <div class="type-icon">⬡</div>
+                        <div class="type-name">From Template</div>
+                        <div class="type-desc">Start with a pre-built design.</div>
+                    </div>
+                    <div class="server-type-card" onclick="selectType(this,'community')">
+                        <div class="type-icon">◈</div>
+                        <div class="type-name">Community</div>
+                        <div class="type-desc">Default Branch UI, no coding needed.</div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="modal-btn modal-btn-ghost" onclick="closeCreateModal()">Cancel</button>
+                    <button class="modal-btn modal-btn-accent" onclick="goToStep(2)">Next &rarr;</button>
+                </div>
+            </div>
+
+            <div class="modal-step" id="step-2">
+                <button class="modal-back" onclick="goToStep(1)">&larr; Back</button>
+                <div class="modal-header">
+                    <div class="modal-title">Name Your Server</div>
+                    <div class="modal-sub">Set a name, pick a photo or icon, and choose your accent color.</div>
+                </div>
+
+                <input type="file" id="photo-file-input" accept="image/*" onchange="handlePhotoUpload(event)">
+
+                <div class="step2-grid">
+                    <div class="step2-left">
+                        <div class="modal-field">
+                            <label class="field-label">Server Photo</label>
+                            <div class="photo-upload-zone" id="photo-upload-zone" onclick="triggerPhotoUpload()">
+                                <div class="photo-upload-icon">📷</div>
+                                <div class="photo-upload-label">Click to upload<br><span>JPG, PNG, GIF, WEBP</span></div>
+                                <button class="photo-upload-remove" onclick="removePhoto(event)" title="Remove photo">✕</button>
+                            </div>
+                        </div>
+                        <div class="modal-field">
+                            <label class="field-label">Or pick an icon</label>
+                            <div style="display:flex;align-items:center;gap:16px;">
+                                <div class="icon-preview" id="icon-preview">✦</div>
+                                <div class="icon-options">
+                                    <span onclick="pickIcon(this,'✦')" class="selected">✦</span>
+                                    <span onclick="pickIcon(this,'⬡')">⬡</span>
+                                    <span onclick="pickIcon(this,'◈')">◈</span>
+                                    <span onclick="pickIcon(this,'⊕')">⊕</span>
+                                    <span onclick="pickIcon(this,'⬒')">⬒</span>
+                                    <span onclick="pickIcon(this,'△')">△</span>
+                                    <span onclick="pickIcon(this,'☽')">☽</span>
+                                    <span onclick="pickIcon(this,'★')">★</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step2-right">
+                        <div class="modal-field">
+                            <label class="field-label">Server Name</label>
+                            <input class="field-input" id="server-name-input" type="text"
+                                   placeholder="e.g. Neon District" maxlength="32"
+                                   oninput="updateSlugPreview()">
+                            <div class="field-hint">branch.app/s/<span id="slug-preview">neon-district</span></div>
+                        </div>
+                        <div class="modal-field">
+                            <label class="field-label">Description <span style="opacity:0.4;font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+                            <input class="field-input" id="server-desc-input" type="text"
+                                   placeholder="What is this server about?" maxlength="80">
+                        </div>
+                        <div class="modal-field">
+                            <label class="field-label">Accent Color</label>
+                            <div class="color-row" style="flex-wrap:wrap;">
+                                <div class="color-swatch selected" style="background:#c8ff00" onclick="pickColor(this,'#c8ff00')"></div>
+                                <div class="color-swatch" style="background:#ff00ff" onclick="pickColor(this,'#ff00ff')"></div>
+                                <div class="color-swatch" style="background:#00ffff" onclick="pickColor(this,'#00ffff')"></div>
+                                <div class="color-swatch" style="background:#ff6b35" onclick="pickColor(this,'#ff6b35')"></div>
+                                <div class="color-swatch" style="background:#a78bfa" onclick="pickColor(this,'#a78bfa')"></div>
+                                <div class="color-swatch" style="background:#34d399" onclick="pickColor(this,'#34d399')"></div>
+                                <div class="color-swatch" style="background:#f9a8d4" onclick="pickColor(this,'#f9a8d4')"></div>
+                                <input type="color" class="color-custom" id="color-custom"
+                                       value="#c8ff00" oninput="pickColorCustom(this.value)">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="modal-btn modal-btn-ghost" onclick="closeCreateModal()">Cancel</button>
+                    <button class="modal-btn modal-btn-accent" onclick="createServer()">Create Server</button>
+                </div>
+            </div>
+
+            <div class="modal-step" id="step-3">
+                <div class="modal-success">
+                    <div class="success-icon" id="success-icon">✦</div>
+                    <div class="modal-title">Server Created!</div>
+                    <div class="modal-sub" id="success-name">Your server is ready.</div>
+                    <div class="success-hint">It's been added to your sidebar.<br>Right-click it to open the editor.</div>
+                </div>
+                <div class="modal-actions" style="justify-content:center;">
+                    <button class="modal-btn modal-btn-ghost" onclick="closeCreateModal()">Maybe Later</button>
+                    <button class="modal-btn modal-btn-accent" onclick="openNewServerEditor()">Open Editor &rarr;</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="branch.js"></script>
+    <script src="branch-servers.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script src="branch-editor.js"></script>
+</body>
+</html>
