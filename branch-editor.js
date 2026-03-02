@@ -95,6 +95,23 @@ function renderServer(serverName) {
   activeServerName = serverName;
 
   const tpl  = SERVER_TEMPLATES[serverName];
+
+  // ── Version-based cache busting ──
+  // If TEMPLATE_VERSIONS says the template is newer than what's cached,
+  // wipe the cached html/css/js so the fresh template is loaded instead.
+  if (tpl && typeof TEMPLATE_VERSIONS !== 'undefined' && TEMPLATE_VERSIONS[serverName]) {
+    const vKey = 'branch::version::' + serverName;
+    const cachedVer = parseInt(localStorage.getItem(vKey) || '0', 10);
+    const currentVer = TEMPLATE_VERSIONS[serverName];
+    if (currentVer > cachedVer) {
+      localStorage.removeItem(key(serverName, 'html'));
+      localStorage.removeItem(key(serverName, 'css'));
+      localStorage.removeItem(key(serverName, 'js'));
+      localStorage.setItem(vKey, String(currentVer));
+      console.log('[Branch] Cache busted for', serverName, 'v' + currentVer);
+    }
+  }
+
   const html = localStorage.getItem(key(serverName, 'html')) || (tpl ? tpl.html : DEFAULT_HTML);
   const css  = localStorage.getItem(key(serverName, 'css'))  || (tpl ? tpl.css  : DEFAULT_CSS);
   const jsrc = localStorage.getItem(key(serverName, 'js'))   || (tpl ? tpl.js   : DEFAULT_JS);
@@ -108,8 +125,28 @@ function renderServer(serverName) {
     compiled = compiled.replace('</head>', '<style>/* SKIN */\n' + skin + '\n</style></head>');
   }
 
-  const blob = new Blob([compiled], { type: 'text/html' });
-  iframe.src = URL.createObjectURL(blob);
+  // ── Inject identity so iframe JS knows who's logged in ──
+  // The Dashboard JS reads window.__branchMe and window.__branchAPI on init
+  const _me      = JSON.parse(localStorage.getItem('branch::me') || 'null') || {};
+  const _apiBase = window.location.origin;
+  const _inject  = `<script>
+window.__branchMe  = ${JSON.stringify(_me)};
+window.__branchAPI = "${_apiBase}";
+<\/script>`;
+  compiled = compiled.replace('<head>', '<head>' + _inject);
+
+  const blob    = new Blob([compiled], { type: 'text/html' });
+  const blobUrl = URL.createObjectURL(blob);
+  iframe.src    = blobUrl;
+
+  // ── Sync to profile embed iframe if the profile panel is open ──
+  const _profileIframe = document.getElementById('fpp-server-iframe');
+  const _profileView   = document.getElementById('fp-view-profile');
+  if (_profileIframe && _profileView && _profileView.style.display !== 'none') {
+    _profileIframe.src = blobUrl;
+    const _lbl = document.getElementById('fpp-embed-server-name');
+    if (_lbl) _lbl.textContent = serverName;
+  }
 }
 
 // ═══════════════════════════════════════
@@ -209,10 +246,8 @@ function openEditor() {
   if (startTab) startTab.classList.add('active');
 
   if (!edIsAdmin) {
-    // Member/customize: start in visual panel
-    edSkinSetPanel('visual', document.getElementById('ed-skin-visual-btn'));
-    // Load server CSS into the customizer reader
-    cvpLoadServerCSS(edFiles.css);
+    // Customize mode: go directly to CSS editor (Visual + Interface panels removed)
+    edSkinSetPanel('code', document.getElementById('ed-skin-code-btn'));
   } else {
     document.getElementById('ed-visual-panel').style.display = 'none';
     document.getElementById('ed-editor-panel').style.display = 'flex';
@@ -656,9 +691,6 @@ function setIfExists(id, val) {
   else el.textContent = val;
 }
 
-// ── PATCH SERVER CSS DIRECTLY ──
-// Takes the clean original CSS and applies all cvpState values into it.
-// Returns the patched CSS string — this becomes edFiles.css.
 function cvpPatchServerCSS() {
   let css = cvpOriginalCSS || edFiles.css;
   const s = cvpState;
@@ -1265,3 +1297,265 @@ function openNewServerEditor() {
     openEditor();
   }
 }
+
+// ════════════════════════════════════════════════════════════════
+// STANDALONE SHELL CUSTOMIZER (shc*)
+// Triggered by: Settings → Customize Shell
+// Completely independent from the editor overlay.
+// Reads/writes shpState (the existing shell state) + adds
+// extra color props (logo bg/icon, page bg, text, font).
+// ════════════════════════════════════════════════════════════════
+
+// Extra defaults for new props (extends SHP_DEFAULTS)
+const SHC_EXTRA = {
+  logoBg:     '#d2d2d2',
+  logoIcon:   '#08080a',
+  bgDeep:     '#08080a',
+  textMain:   '#ffffff',
+  textDim:    '#71717a',
+  fontFamily: "'Inter',system-ui,sans-serif",
+};
+
+// On load, merge extra defaults into shpState
+(function mergeExtras() {
+  // If shpState already has these keys (from saved state), keep them; else add defaults
+  Object.keys(SHC_EXTRA).forEach(k => {
+    if (!(k in shpState)) shpState[k] = SHC_EXTRA[k];
+  });
+})();
+
+// Override shpBuildCSS to include extra colors, logo overrides, font, bgDeep
+const _origShpBuildCSS = shpBuildCSS;
+shpBuildCSS = function() {
+  const s = shpState;
+  const lines = ['/* ══ Branch Shell Skin — auto-generated ══ */'];
+  lines.push(':root {');
+  lines.push(`  --topbar-h: ${s.topbarH||100}px;`);
+  lines.push(`  --topbar-bg: ${s.topbarBg||'#121217'};`);
+  lines.push(`  --accent: ${s.accent||'#d2d2d2'};`);
+  lines.push(`  --search-w: ${s.searchW||380}px;`);
+  lines.push(`  --search-radius: ${s.searchRadius||12}px;`);
+  lines.push(`  --search-btn-radius: ${s.searchBtnRadius||8}px;`);
+  lines.push(`  --sidebar-w: ${s.sidebarW||120}px;`);
+  lines.push(`  --sidebar-icon-size: ${s.iconSize||74}px;`);
+  lines.push(`  --sidebar-icon-radius: ${s.iconRadius||18}px;`);
+  lines.push(`  --sidebar-bg: ${s.sidebarBg||'#121217'};`);
+  lines.push(`  --logo-size: ${s.logoSize||74}px;`);
+  lines.push(`  --logo-radius: ${s.logoRadius||20}px;`);
+  lines.push(`  --avatar-radius: ${s.avatarRadius||15}px;`);
+  lines.push(`  --bg-deep: ${s.bgDeep||'#08080a'};`);
+  lines.push(`  --text-main: ${s.textMain||'#ffffff'};`);
+  lines.push(`  --text-dim: ${s.textDim||'#71717a'};`);
+  lines.push('}');
+  // Logo colors
+  lines.push(`.logo { background: ${s.logoBg||s.accent||'#d2d2d2'} !important; color: ${s.logoIcon||'#08080a'} !important; }`);
+  // body bg
+  lines.push(`body { background-color: ${s.bgDeep||'#08080a'} !important; }`);
+  // Font
+  if (s.fontFamily) {
+    lines.push(`body, .top-bar, .sidebar, .dropdown-menu { font-family: ${s.fontFamily} !important; }`);
+  }
+  // Search position
+  const pos = s.searchPos || 'center';
+  if (pos === 'left')       lines.push('.search-container { margin-left: 0; margin-right: auto; }');
+  else if (pos === 'right') lines.push('.search-container { margin-left: auto; margin-right: 0; }');
+  else                      lines.push('.search-container { margin-left: auto; margin-right: auto; }');
+  lines.push('/* ══ End Shell Skin ══ */');
+  return lines.join('\n');
+};
+
+// Open / close
+function openShellCustomizer() {
+  shcSyncUI();
+  document.getElementById('shc-panel').classList.add('open');
+  document.getElementById('shc-backdrop').classList.add('open');
+}
+function closeShellCustomizer() {
+  document.getElementById('shc-panel').classList.remove('open');
+  document.getElementById('shc-backdrop').classList.remove('open');
+}
+
+// Color input handler
+function shcColor(prop, value) {
+  const map = {
+    'accent':      'accent',
+    'bg':          'bgDeep',
+    'topbar-bg':   'topbarBg',
+    'sidebar-bg':  'sidebarBg',
+    'logo-bg':     'logoBg',
+    'logo-icon':   'logoIcon',
+    'text':        'textMain',
+    'text-dim':    'textDim',
+  };
+  const key = map[prop];
+  if (!key) return;
+  shpState[key] = value;
+  // Sync paired hex field
+  const hexEl = document.getElementById('shc-' + prop + '-hex');
+  if (hexEl) hexEl.value = value;
+  shpApply();
+}
+
+// Hex text input handler
+function shcHex(prop, value) {
+  if (/^#[0-9a-f]{6}$/i.test(value)) shcColor(prop, value);
+}
+
+// Accent preset: sets accent + logo icon color together
+function shcAccentPreset(accent, logoIcon) {
+  shpState.accent   = accent;
+  shpState.logoBg   = accent;
+  shpState.logoIcon = logoIcon;
+  shcSyncUI();
+  shpApply();
+}
+
+// Slider
+function shcSlider(prop, value, unit) {
+  const map = {
+    'topbar-h':      'topbarH',
+    'search-w':      'searchW',
+    'search-radius': 'searchRadius',
+    'search-btn-r':  'searchBtnRadius',
+    'sidebar-w':     'sidebarW',
+    'icon-size':     'iconSize',
+    'icon-radius':   'iconRadius',
+    'logo-size':     'logoSize',
+    'logo-radius':   'logoRadius',
+  };
+  const key = map[prop];
+  if (!key) return;
+  shpState[key] = parseInt(value);
+  const el = document.getElementById('shc-' + prop + '-val');
+  if (el) el.textContent = value + unit;
+  shpApply();
+}
+
+// Font
+function shcFont(el) {
+  document.querySelectorAll('#shc-font-chips .shc-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  shpState.fontFamily = el.dataset.font;
+  shpApply();
+}
+
+// Search position
+function shcSearchPos(el) {
+  document.querySelectorAll('#shc-pos-chips .shc-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  shpState.searchPos = el.dataset.pos;
+  shpApply();
+}
+
+// Avatar shape
+function shcAvatar(el) {
+  document.querySelectorAll('#shc-av-chips .shc-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  shpState.avatarRadius = parseInt(el.dataset.av);
+  shpApply();
+}
+
+// Quick presets
+function shcPreset(name) {
+  const presets = {
+    minimal: { topbarH:64, searchRadius:4, searchBtnRadius:2, iconRadius:4, logoRadius:4, avatarRadius:4, sidebarW:88, iconSize:58, logoSize:52 },
+    rounded: { topbarH:100, searchRadius:40, searchBtnRadius:40, iconRadius:50, logoRadius:50, avatarRadius:50, sidebarW:110, iconSize:70, logoSize:70 },
+    compact: { topbarH:62, searchRadius:8, searchBtnRadius:6, iconRadius:12, logoRadius:12, avatarRadius:10, sidebarW:80, iconSize:52, logoSize:52 },
+    wide:    { topbarH:120, searchW:600, searchRadius:14, searchBtnRadius:10, iconRadius:18, logoRadius:20, avatarRadius:14, sidebarW:150, iconSize:80, logoSize:80 },
+  };
+  if (presets[name]) {
+    Object.assign(shpState, presets[name]);
+    shcSyncUI();
+    shpApply();
+  }
+}
+
+// Reset to defaults
+function shcReset() {
+  shpState = { ...SHP_DEFAULTS, ...SHC_EXTRA };
+  shcSyncUI();
+  shpApply();
+}
+
+// Save
+function shcSave() {
+  localStorage.setItem(SHP_STORAGE_KEY, JSON.stringify(shpState));
+  shpApply();
+  closeShellCustomizer();
+  const toast = document.getElementById('ed-toast-save');
+  if (toast) { toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2200); }
+}
+
+// Sync all SHC UI inputs from shpState
+function shcSyncUI() {
+  const s = shpState;
+  const sv = (id, v) => { const el = document.getElementById(id); if (!el) return; if (el.tagName==='INPUT') el.value = v; else el.textContent = v; };
+
+  sv('shc-accent',       s.accent     || '#d2d2d2');
+  sv('shc-accent-hex',   s.accent     || '#d2d2d2');
+  sv('shc-bg',           s.bgDeep     || '#08080a');
+  sv('shc-bg-hex',       s.bgDeep     || '#08080a');
+  sv('shc-topbar-bg',    s.topbarBg   || '#121217');
+  sv('shc-topbar-bg-hex',s.topbarBg   || '#121217');
+  sv('shc-sidebar-bg',   s.sidebarBg  || '#121217');
+  sv('shc-sidebar-bg-hex',s.sidebarBg || '#121217');
+  sv('shc-logo-bg',      s.logoBg     || s.accent || '#d2d2d2');
+  sv('shc-logo-bg-hex',  s.logoBg     || s.accent || '#d2d2d2');
+  sv('shc-logo-icon',    s.logoIcon   || '#08080a');
+  sv('shc-logo-icon-hex',s.logoIcon   || '#08080a');
+  sv('shc-text',         s.textMain   || '#ffffff');
+  sv('shc-text-hex',     s.textMain   || '#ffffff');
+  sv('shc-text-dim',     s.textDim    || '#71717a');
+  sv('shc-text-dim-hex', s.textDim    || '#71717a');
+
+  sv('shc-topbar-h',        s.topbarH     || 100);
+  sv('shc-topbar-h-val',   (s.topbarH     || 100) + 'px');
+  sv('shc-search-w',        s.searchW     || 380);
+  sv('shc-search-w-val',   (s.searchW     || 380) + 'px');
+  sv('shc-search-radius',   s.searchRadius|| 12);
+  sv('shc-search-radius-val',(s.searchRadius||12)+'px');
+  sv('shc-search-btn-r',    s.searchBtnRadius||8);
+  sv('shc-search-btn-r-val',(s.searchBtnRadius||8)+'px');
+  sv('shc-sidebar-w',       s.sidebarW    || 120);
+  sv('shc-sidebar-w-val',  (s.sidebarW    || 120)+'px');
+  sv('shc-icon-size',       s.iconSize    || 74);
+  sv('shc-icon-size-val',  (s.iconSize    || 74)+'px');
+  sv('shc-icon-radius',     s.iconRadius  || 18);
+  sv('shc-icon-radius-val',(s.iconRadius  || 18)+'px');
+  sv('shc-logo-size',       s.logoSize    || 74);
+  sv('shc-logo-size-val',  (s.logoSize    || 74)+'px');
+  sv('shc-logo-radius',     s.logoRadius  || 20);
+  sv('shc-logo-radius-val',(s.logoRadius  || 20)+'px');
+
+  // Font chips
+  const font = s.fontFamily || "'Inter',system-ui,sans-serif";
+  document.querySelectorAll('#shc-font-chips .shc-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.font === font);
+  });
+  // Position chips
+  const pos = s.searchPos || 'center';
+  document.querySelectorAll('#shc-pos-chips .shc-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.pos === pos);
+  });
+  // Avatar chips
+  const av = s.avatarRadius !== undefined ? s.avatarRadius : 15;
+  document.querySelectorAll('#shc-av-chips .shc-chip').forEach(c => {
+    c.classList.toggle('active', parseInt(c.dataset.av) === av);
+  });
+}
+
+// Also load extra defaults when shpLoad runs
+const _origShpLoad = shpLoad;
+shpLoad = function() {
+  try {
+    const saved = localStorage.getItem(SHP_STORAGE_KEY);
+    if (saved) {
+      shpState = { ...SHP_DEFAULTS, ...SHC_EXTRA, ...JSON.parse(saved) };
+    } else {
+      shpState = { ...SHP_DEFAULTS, ...SHC_EXTRA };
+    }
+  } catch(e) {
+    shpState = { ...SHP_DEFAULTS, ...SHC_EXTRA };
+  }
+  shpApply();
+};

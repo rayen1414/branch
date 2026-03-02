@@ -8,15 +8,89 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <!-- Shell skin: CSS-only overrides for the outer interface. Never touches server JS. -->
     <style id="branch-shell-skin"></style>
+    <style>
+    /* ── Search Dropdown ─────────────────────────────── */
+    .search-container { position: relative; }
+
+    .search-dropdown {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0; right: 0;
+        background: #1a1a20;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 12px;
+        overflow: hidden;
+        z-index: 9999;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        max-height: 340px;
+        overflow-y: auto;
+    }
+    .search-dropdown.hidden { display: none; }
+
+    .sd-section {
+        padding: 8px 14px 4px;
+        font-size: 10px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,0.3);
+        font-weight: 700;
+    }
+    .sd-user {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 14px;
+        cursor: pointer;
+        transition: background .15s;
+    }
+    .sd-user:hover { background: rgba(255,255,255,0.05); }
+    .sd-av {
+        width: 34px; height: 34px;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 14px;
+        flex-shrink: 0;
+    }
+    .sd-info { flex: 1; min-width: 0; }
+    .sd-name { font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sd-handle { font-size: 11px; color: rgba(255,255,255,0.4); }
+    .sd-empty {
+        padding: 20px 14px;
+        font-size: 13px;
+        color: rgba(255,255,255,0.3);
+        text-align: center;
+    }
+    .sd-loading {
+        padding: 16px 14px;
+        font-size: 12px;
+        color: rgba(255,255,255,0.35);
+        text-align: center;
+    }
+    .sd-user-btn {
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(255,255,255,0.15);
+        background: transparent;
+        color: rgba(255,255,255,0.6);
+        cursor: pointer;
+        transition: all .15s;
+    }
+    .sd-user-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    </style>
 </head>
 <body>
 
     <div class="logo" onclick="toggleinterface()" title="Toggle Interface" data-icon="logo"></div>
 
     <header class="top-bar">
-        <div class="search-container">
-            <input type="text" placeholder="Explore branches...">
-            <button class="search-btn" data-icon="search"></button>
+        <div class="search-container" id="search-container">
+            <input type="text" id="search-input" placeholder="Explore branches... or @username"
+                   oninput="handleSearchInput(this.value)"
+                   onkeydown="handleSearchKey(event)"
+                   autocomplete="off">
+            <button class="search-btn" data-icon="search" onclick="triggerSearch()"></button>
+            <div id="search-dropdown" class="search-dropdown hidden"></div>
         </div>
         <div class="top-actions">
             <div class="action-item" onclick="toggleMenu('notif-dropdown')" data-icon="bell">
@@ -37,20 +111,22 @@
             <div class="action-item" onclick="toggleMenu('settings-dropdown')" data-icon="settings">
                 <div id="settings-dropdown" class="dropdown-menu">
                     <div class="menu-header">Preferences</div>
+                    <div class="menu-item" onclick="openShellCustomizer(); toggleMenu('settings-dropdown')" style="cursor:pointer;">
+                        <span style="opacity:0.7;margin-right:6px;">🖥</span>Customize Shell
+                    </div>
                     <div class="menu-item">Account Settings</div>
-                    <div class="menu-item">Theme Customization</div>
-                    <div class="menu-item" style="color:#ff4d4d;border-top:1px solid rgba(255,255,255,0.05);margin-top:5px;">Logout</div>
+                    <div class="menu-item" onclick="doLogout()" style="color:#ff4d4d;border-top:1px solid rgba(255,255,255,0.05);margin-top:5px;cursor:pointer;">Logout</div>
                 </div>
             </div>
             <div class="divider"></div>
-            <div class="user-profile">
+            <div class="user-profile" onclick="openFriendPanel()" style="cursor:pointer;" title="Friends & Profile">
                 <div class="user-info">
-                    <span class="username">Alex_Indie</span>
+                    <span class="username">...</span>
                     <span class="status-text">In a Branch</span>
                 </div>
                 <div class="avatar-frame">
                     <div class="avatar-status"></div>
-                    <div class="avatar-content" data-icon="user"></div>
+                    <div class="avatar-content" id="top-avatar" style="background:#c8ff00;color:#000;font-weight:800;font-size:22px;">?</div>
                 </div>
             </div>
         </div>
@@ -87,7 +163,8 @@
         </div>
     </nav>
 
-    <main class="main-container">
+    <!-- FIX: main-container closes friend panel on click -->
+    <main class="main-container" id="main-container">
         <iframe id="server-iframe" class="server-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
     </main>
 
@@ -131,17 +208,13 @@
             <div class="ed-role-badge ed-role-member" id="ed-badge-member">CUSTOMIZE</div>
             <div class="ed-server-name" id="ed-server-name">Server</div>
             <div class="ed-spacer"></div>
-            <!-- Admin mode tabs -->
             <div class="ed-tab-group" id="ed-mode-tabs">
                 <button class="ed-tab active" onclick="edSetMode(event,'split')">Split</button>
                 <button class="ed-tab" onclick="edSetMode(event,'code')">Code</button>
                 <button class="ed-tab" onclick="edSetMode(event,'preview')">Preview</button>
             </div>
-            <!-- Member/customize mode tabs -->
             <div class="ed-tab-group" id="ed-skin-tabs" style="display:none;">
-                <button class="ed-tab active" id="ed-skin-visual-btn" onclick="edSkinSetPanel('visual',this)">🎨 Visual</button>
-                <button class="ed-tab" id="ed-skin-shell-btn" onclick="edSkinSetPanel('shell',this)">🖥 Interface</button>
-                <button class="ed-tab" id="ed-skin-code-btn" onclick="edSkinSetPanel('code',this)">✦ CSS</button>
+                <button class="ed-tab active" id="ed-skin-code-btn" onclick="edSkinSetPanel('code',this)">✦ CSS</button>
             </div>
             <button class="ed-btn ed-btn-ghost" onclick="edRefresh()" id="ed-refresh-btn">↻ Refresh</button>
             <button class="ed-btn ed-btn-accent" id="ed-publish-btn" onclick="edPublish()">▲ Publish</button>
@@ -150,385 +223,9 @@
         </div>
 
         <div class="ed-workspace">
+            <div class="ed-visual-panel" id="ed-visual-panel" style="display:none;"></div>
+            <div class="ed-visual-panel" id="ed-shell-panel" style="display:none;"></div>
 
-            <!-- ═══════════════════════════════════════════
-                 VISUAL CUSTOMIZER PANEL (member/default mode)
-                 Fully reworked — reads server CSS vars
-                 ═══════════════════════════════════════════ -->
-            <div class="ed-visual-panel" id="ed-visual-panel" style="display:none;">
-
-                <!-- HEADER -->
-                <div class="cvp-header">
-                    <div class="cvp-title">🎨 Visual Customizer</div>
-                    <div class="cvp-subtitle">Edit this server's CSS visually — changes save to the real server stylesheet</div>
-                </div>
-
-                <div class="cvp-scroll">
-
-                    <!-- COLORS SECTION -->
-                    <div class="cvp-section-label">Colors</div>
-
-                    <div class="cvp-color-row">
-                        <div class="cvp-color-slot">
-                            <label class="cvp-color-label">Accent</label>
-                            <div class="cvp-color-pair">
-                                <input type="color" id="cvp-accent-color" value="#c8ff00"
-                                       oninput="cvpSetAccent(this.value)">
-                                <input type="text" id="cvp-accent-hex" class="cvp-hex-input"
-                                       value="#c8ff00" maxlength="7"
-                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))cvpSetAccent(this.value)">
-                            </div>
-                        </div>
-                        <div class="cvp-color-slot">
-                            <label class="cvp-color-label">Background</label>
-                            <div class="cvp-color-pair">
-                                <input type="color" id="cvp-bg-color" value="#0a0a0f"
-                                       oninput="cvpSetBg(this.value)">
-                                <input type="text" id="cvp-bg-hex" class="cvp-hex-input"
-                                       value="#0a0a0f" maxlength="7"
-                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))cvpSetBg(this.value)">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="cvp-color-row">
-                        <div class="cvp-color-slot">
-                            <label class="cvp-color-label">Surface</label>
-                            <div class="cvp-color-pair">
-                                <input type="color" id="cvp-surface-color" value="#111118"
-                                       oninput="cvpSetSurface(this.value)">
-                                <input type="text" id="cvp-surface-hex" class="cvp-hex-input"
-                                       value="#111118" maxlength="7"
-                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))cvpSetSurface(this.value)">
-                            </div>
-                        </div>
-                        <div class="cvp-color-slot">
-                            <label class="cvp-color-label">Text</label>
-                            <div class="cvp-color-pair">
-                                <input type="color" id="cvp-text-color" value="#e0e0e8"
-                                       oninput="cvpSetText(this.value)">
-                                <input type="text" id="cvp-text-hex" class="cvp-hex-input"
-                                       value="#e0e0e8" maxlength="7"
-                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))cvpSetText(this.value)">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ACCENT PRESETS -->
-                    <div class="cvp-presets">
-                        <div class="cvp-preset" style="background:#c8ff00" onclick="cvpSetAccent('#c8ff00')" title="Neon Lime"></div>
-                        <div class="cvp-preset" style="background:#ff3cac" onclick="cvpSetAccent('#ff3cac')" title="Hot Pink"></div>
-                        <div class="cvp-preset" style="background:#00f5d4" onclick="cvpSetAccent('#00f5d4')" title="Mint"></div>
-                        <div class="cvp-preset" style="background:#ff6b35" onclick="cvpSetAccent('#ff6b35')" title="Fire"></div>
-                        <div class="cvp-preset" style="background:#a78bfa" onclick="cvpSetAccent('#a78bfa')" title="Lavender"></div>
-                        <div class="cvp-preset" style="background:#60a5fa" onclick="cvpSetAccent('#60a5fa')" title="Sky"></div>
-                        <div class="cvp-preset" style="background:#f59e0b" onclick="cvpSetAccent('#f59e0b')" title="Amber"></div>
-                        <div class="cvp-preset" style="background:#d2d2d2" onclick="cvpSetAccent('#d2d2d2')" title="Silver"></div>
-                    </div>
-
-                    <!-- TYPOGRAPHY -->
-                    <div class="cvp-section-label">Typography</div>
-
-                    <div class="cvp-fonts">
-                        <div class="cvp-font-opt sel" data-font="system-ui, sans-serif" onclick="cvpSetFont(this)" style="font-family:system-ui,sans-serif;">Sans</div>
-                        <div class="cvp-font-opt" data-font="Georgia, serif" onclick="cvpSetFont(this)" style="font-family:Georgia,serif;">Serif</div>
-                        <div class="cvp-font-opt" data-font="'Courier New', monospace" onclick="cvpSetFont(this)" style="font-family:'Courier New',monospace;">Mono</div>
-                    </div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Font size</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="cvp-fontsize"
-                                   min="12" max="20" value="14"
-                                   oninput="cvpUpdateSlider('fontsize',this.value,'px')">
-                            <span class="cvp-val" id="cvp-fontsize-val">14px</span>
-                        </div>
-                    </div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Border radius</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="cvp-radius"
-                                   min="0" max="28" value="12"
-                                   oninput="cvpUpdateSlider('radius',this.value,'px')">
-                            <span class="cvp-val" id="cvp-radius-val">12px</span>
-                        </div>
-                    </div>
-
-                    <!-- CARD STYLE -->
-                    <div class="cvp-section-label">Card Style</div>
-                    <div class="cvp-cards">
-                        <div class="cvp-card-opt sel" data-style="default" onclick="cvpSetCardStyle(this)">
-                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.15);border-radius:8px;"></div>
-                            <span>Default</span>
-                        </div>
-                        <div class="cvp-card-opt" data-style="flat" onclick="cvpSetCardStyle(this)">
-                            <div class="cvp-card-preview" style="background:rgba(255,255,255,0.06);border-radius:3px;"></div>
-                            <span>Flat</span>
-                        </div>
-                        <div class="cvp-card-opt" data-style="outline" onclick="cvpSetCardStyle(this)">
-                            <div class="cvp-card-preview" style="border:2px solid rgba(255,255,255,0.3);border-radius:8px;"></div>
-                            <span>Outline</span>
-                        </div>
-                        <div class="cvp-card-opt" data-style="ghost" onclick="cvpSetCardStyle(this)">
-                            <div class="cvp-card-preview" style="border-bottom:1px solid rgba(255,255,255,0.2);border-radius:0;"></div>
-                            <span>Ghost</span>
-                        </div>
-                        <div class="cvp-card-opt" data-style="glass" onclick="cvpSetCardStyle(this)">
-                            <div class="cvp-card-preview" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;backdrop-filter:blur(8px);"></div>
-                            <span>Glass</span>
-                        </div>
-                    </div>
-
-                    <!-- BACKGROUND MODE -->
-                    <div class="cvp-section-label">Background</div>
-                    <div class="cvp-bgs">
-                        <div class="cvp-bg-opt sel" data-mode="solid" onclick="cvpSetBgMode(this)">
-                            <div class="cvp-bg-preview" style="background:#0a0a0f;"></div>
-                            <span>Solid</span>
-                        </div>
-                        <div class="cvp-bg-opt" data-mode="gradient-warm" onclick="cvpSetBgMode(this)">
-                            <div class="cvp-bg-preview" style="background:linear-gradient(135deg,#0e0a00,#1a0d00);"></div>
-                            <span>Warm</span>
-                        </div>
-                        <div class="cvp-bg-opt" data-mode="gradient-cool" onclick="cvpSetBgMode(this)">
-                            <div class="cvp-bg-preview" style="background:linear-gradient(135deg,#000814,#001429);"></div>
-                            <span>Cool</span>
-                        </div>
-                        <div class="cvp-bg-opt" data-mode="gradient-neon" onclick="cvpSetBgMode(this)">
-                            <div class="cvp-bg-preview" style="background:linear-gradient(135deg,#0a000f,#000a0f);"></div>
-                            <span>Neon</span>
-                        </div>
-                        <div class="cvp-bg-opt" data-mode="grid" onclick="cvpSetBgMode(this)">
-                            <div class="cvp-bg-preview" style="background-color:#0a0a0f;background-image:linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px);background-size:10px 10px;"></div>
-                            <span>Grid</span>
-                        </div>
-                        <div class="cvp-bg-opt" data-mode="dots" onclick="cvpSetBgMode(this)">
-                            <div class="cvp-bg-preview" style="background-color:#0a0a0f;background-image:radial-gradient(rgba(255,255,255,.2) 1px,transparent 1px);background-size:8px 8px;"></div>
-                            <span>Dots</span>
-                        </div>
-                    </div>
-
-                    <!-- SPACING -->
-                    <div class="cvp-section-label">Spacing</div>
-                    <div class="cvp-spacings">
-                        <div class="cvp-spacing-opt" data-spacing="compact" onclick="cvpSetSpacing(this)">Compact</div>
-                        <div class="cvp-spacing-opt sel" data-spacing="normal" onclick="cvpSetSpacing(this)">Normal</div>
-                        <div class="cvp-spacing-opt" data-spacing="relaxed" onclick="cvpSetSpacing(this)">Relaxed</div>
-                    </div>
-
-                </div><!-- /cvp-scroll -->
-
-                <!-- FOOTER ACTIONS -->
-                <div class="cvp-footer">
-                    <button class="cvp-btn-secondary" onclick="cvpReset()">↺ Reset</button>
-                    <button class="cvp-btn-secondary" onclick="cvpApplyToEditor()">✦ Edit CSS</button>
-                    <button class="cvp-btn-primary" onclick="edPublish()">💾 Save to Server</button>
-                </div>
-
-            </div><!-- /ed-visual-panel -->
-
-            <!-- ═══════════════════════════════════════════
-                 SHELL / INTERFACE CUSTOMIZER PANEL
-                 Controls layout, sizes, shapes of the
-                 outer Branch interface. CSS-only — never
-                 touches server JS or server content.
-                 ═══════════════════════════════════════════ -->
-            <div class="ed-visual-panel" id="ed-shell-panel" style="display:none;">
-
-                <div class="cvp-header">
-                    <div class="cvp-title">🖥 Interface Customizer</div>
-                    <div class="cvp-subtitle">Move, resize & reshape the Branch shell — CSS only, server JS is always safe</div>
-                </div>
-
-                <div class="cvp-scroll">
-
-                    <!-- TOPBAR -->
-                    <div class="cvp-section-label">Top Bar</div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Bar Height</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="shp-topbar-h"
-                                   min="60" max="140" value="100"
-                                   oninput="shpUpdate('topbar-h',this.value,'px')">
-                            <span class="cvp-val" id="shp-topbar-h-val">100px</span>
-                        </div>
-                    </div>
-
-                    <div class="cvp-color-row">
-                        <div class="cvp-color-slot">
-                            <label class="cvp-color-label">Bar Color</label>
-                            <div class="cvp-color-pair">
-                                <input type="color" id="shp-topbar-bg-color" value="#121217"
-                                       oninput="shpUpdateColor('topbar-bg',this.value)">
-                                <input type="text" id="shp-topbar-bg-hex" class="cvp-hex-input"
-                                       value="#121217" maxlength="7"
-                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))shpUpdateColor('topbar-bg',this.value)">
-                            </div>
-                        </div>
-                        <div class="cvp-color-slot">
-                            <label class="cvp-color-label">Accent Color</label>
-                            <div class="cvp-color-pair">
-                                <input type="color" id="shp-accent-color" value="#d2d2d2"
-                                       oninput="shpUpdateColor('accent',this.value)">
-                                <input type="text" id="shp-accent-hex" class="cvp-hex-input"
-                                       value="#d2d2d2" maxlength="7"
-                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))shpUpdateColor('accent',this.value)">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SEARCH BAR -->
-                    <div class="cvp-section-label">Search Bar</div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Width</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="shp-search-w"
-                                   min="200" max="700" value="380"
-                                   oninput="shpUpdate('search-w',this.value,'px')">
-                            <span class="cvp-val" id="shp-search-w-val">380px</span>
-                        </div>
-                    </div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Corner Radius</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="shp-search-radius"
-                                   min="0" max="40" value="12"
-                                   oninput="shpUpdate('search-radius',this.value,'px')">
-                            <span class="cvp-val" id="shp-search-radius-val">12px</span>
-                        </div>
-                    </div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Search Btn Radius</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="shp-search-btn-radius"
-                                   min="0" max="40" value="8"
-                                   oninput="shpUpdate('search-btn-radius',this.value,'px')">
-                            <span class="cvp-val" id="shp-search-btn-radius-val">8px</span>
-                        </div>
-                    </div>
-
-                    <!-- SEARCH POSITION (left / center / right) -->
-                    <div class="cvp-section-label">Search Position</div>
-                    <div class="cvp-spacings">
-                        <div class="cvp-spacing-opt sel" data-pos="center" onclick="shpSetSearchPos(this)">Center</div>
-                        <div class="cvp-spacing-opt" data-pos="left" onclick="shpSetSearchPos(this)">Left</div>
-                        <div class="cvp-spacing-opt" data-pos="right" onclick="shpSetSearchPos(this)">Right</div>
-                    </div>
-
-                    <!-- SIDEBAR -->
-                    <div class="cvp-section-label">Sidebar</div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Width</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="shp-sidebar-w"
-                                   min="70" max="200" value="120"
-                                   oninput="shpUpdate('sidebar-w',this.value,'px')">
-                            <span class="cvp-val" id="shp-sidebar-w-val">120px</span>
-                        </div>
-                    </div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Icon Size</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="shp-icon-size"
-                                   min="40" max="90" value="74"
-                                   oninput="shpUpdate('icon-size',this.value,'px')">
-                            <span class="cvp-val" id="shp-icon-size-val">74px</span>
-                        </div>
-                    </div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Icon Corner Radius</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="shp-icon-radius"
-                                   min="0" max="50" value="18"
-                                   oninput="shpUpdate('icon-radius',this.value,'px')">
-                            <span class="cvp-val" id="shp-icon-radius-val">18px</span>
-                        </div>
-                    </div>
-
-                    <div class="cvp-color-row">
-                        <div class="cvp-color-slot">
-                            <label class="cvp-color-label">Sidebar Color</label>
-                            <div class="cvp-color-pair">
-                                <input type="color" id="shp-sidebar-bg-color" value="#121217"
-                                       oninput="shpUpdateColor('sidebar-bg',this.value)">
-                                <input type="text" id="shp-sidebar-bg-hex" class="cvp-hex-input"
-                                       value="#121217" maxlength="7"
-                                       oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))shpUpdateColor('sidebar-bg',this.value)">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- LOGO -->
-                    <div class="cvp-section-label">Logo / Brand</div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Logo Size</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="shp-logo-size"
-                                   min="40" max="100" value="74"
-                                   oninput="shpUpdate('logo-size',this.value,'px')">
-                            <span class="cvp-val" id="shp-logo-size-val">74px</span>
-                        </div>
-                    </div>
-
-                    <div class="cvp-slider-row">
-                        <label class="cvp-slider-label">Logo Corner Radius</label>
-                        <div class="cvp-slider-track">
-                            <input type="range" class="cvp-slider" id="shp-logo-radius"
-                                   min="0" max="50" value="20"
-                                   oninput="shpUpdate('logo-radius',this.value,'px')">
-                            <span class="cvp-val" id="shp-logo-radius-val">20px</span>
-                        </div>
-                    </div>
-
-                    <!-- AVATAR -->
-                    <div class="cvp-section-label">Avatar Shape</div>
-                    <div class="cvp-spacings">
-                        <div class="cvp-spacing-opt sel" data-av="15" onclick="shpSetAvatar(this)">Rounded</div>
-                        <div class="cvp-spacing-opt" data-av="50" onclick="shpSetAvatar(this)">Circle</div>
-                        <div class="cvp-spacing-opt" data-av="4" onclick="shpSetAvatar(this)">Sharp</div>
-                        <div class="cvp-spacing-opt" data-av="0" onclick="shpSetAvatar(this)">Square</div>
-                    </div>
-
-                    <!-- PRESET LAYOUTS -->
-                    <div class="cvp-section-label">Quick Presets</div>
-                    <div class="cvp-cards" style="flex-wrap:wrap;gap:8px;">
-                        <div class="cvp-card-opt" onclick="shpPreset('minimal')" style="flex:1;min-width:80px;">
-                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;font-size:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);">─</div>
-                            <span>Minimal</span>
-                        </div>
-                        <div class="cvp-card-opt" onclick="shpPreset('rounded')" style="flex:1;min-width:80px;">
-                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.1);border-radius:16px;font-size:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);">◉</div>
-                            <span>Rounded</span>
-                        </div>
-                        <div class="cvp-card-opt" onclick="shpPreset('compact')" style="flex:1;min-width:80px;">
-                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.1);border-radius:8px;height:18px;font-size:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);">▬</div>
-                            <span>Compact</span>
-                        </div>
-                        <div class="cvp-card-opt" onclick="shpPreset('wide')" style="flex:1;min-width:80px;">
-                            <div class="cvp-card-preview" style="border:1px solid rgba(255,255,255,0.1);border-radius:8px;font-size:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);">◫</div>
-                            <span>Wide</span>
-                        </div>
-                    </div>
-
-                </div><!-- /cvp-scroll -->
-
-                <div class="cvp-footer">
-                    <button class="cvp-btn-secondary" onclick="shpReset()">↺ Reset</button>
-                    <button class="cvp-btn-primary" onclick="shpSave()">💾 Save Layout</button>
-                </div>
-
-            </div><!-- /ed-shell-panel -->
-
-            <!-- EDITOR PANEL -->
             <div class="ed-editor-panel" id="ed-editor-panel">
                 <div class="ed-file-tabs" id="ed-file-tabs">
                     <div class="ed-file-tab active ed-admin-tab" data-file="html" onclick="edSwitchFile('html',this)"><span class="ed-dot"></span>index.html</div>
@@ -540,7 +237,6 @@
             </div>
             <div class="ed-resizer" id="ed-resizer"></div>
 
-            <!-- PREVIEW PANEL -->
             <div class="ed-preview-panel" id="ed-preview-panel">
                 <div class="ed-preview-bar">
                     <div class="ed-preview-dots">
@@ -689,6 +385,397 @@
             </div>
 
         </div>
+    </div>
+
+    <!-- SHELL CUSTOMIZER -->
+    <div id="shc-backdrop" class="shc-backdrop" onclick="closeShellCustomizer()"></div>
+    <div id="shc-panel" class="shc-panel">
+        <div class="shc-header">
+            <div class="shc-header-text">
+                <div class="shc-title">🖥 Shell Customizer</div>
+                <div class="shc-sub">Reshapes the outer Branch interface live — server code never touched</div>
+            </div>
+            <button class="shc-close" onclick="closeShellCustomizer()">✕</button>
+        </div>
+
+        <div class="shc-body">
+            <div class="shc-section">COLORS</div>
+            <div class="shc-grid2">
+                <div class="shc-field">
+                    <div class="shc-flabel">Accent</div>
+                    <div class="shc-cpair">
+                        <input type="color" id="shc-accent" value="#d2d2d2" oninput="shcColor('accent',this.value)">
+                        <input type="text"  id="shc-accent-hex" class="shc-hex" value="#d2d2d2" maxlength="7" oninput="shcHex('accent',this.value)">
+                    </div>
+                </div>
+                <div class="shc-field">
+                    <div class="shc-flabel">Page Background</div>
+                    <div class="shc-cpair">
+                        <input type="color" id="shc-bg" value="#08080a" oninput="shcColor('bg',this.value)">
+                        <input type="text"  id="shc-bg-hex" class="shc-hex" value="#08080a" maxlength="7" oninput="shcHex('bg',this.value)">
+                    </div>
+                </div>
+                <div class="shc-field">
+                    <div class="shc-flabel">Topbar</div>
+                    <div class="shc-cpair">
+                        <input type="color" id="shc-topbar-bg" value="#121217" oninput="shcColor('topbar-bg',this.value)">
+                        <input type="text"  id="shc-topbar-bg-hex" class="shc-hex" value="#121217" maxlength="7" oninput="shcHex('topbar-bg',this.value)">
+                    </div>
+                </div>
+                <div class="shc-field">
+                    <div class="shc-flabel">Sidebar</div>
+                    <div class="shc-cpair">
+                        <input type="color" id="shc-sidebar-bg" value="#121217" oninput="shcColor('sidebar-bg',this.value)">
+                        <input type="text"  id="shc-sidebar-bg-hex" class="shc-hex" value="#121217" maxlength="7" oninput="shcHex('sidebar-bg',this.value)">
+                    </div>
+                </div>
+                <div class="shc-field">
+                    <div class="shc-flabel">Logo Background</div>
+                    <div class="shc-cpair">
+                        <input type="color" id="shc-logo-bg" value="#d2d2d2" oninput="shcColor('logo-bg',this.value)">
+                        <input type="text"  id="shc-logo-bg-hex" class="shc-hex" value="#d2d2d2" maxlength="7" oninput="shcHex('logo-bg',this.value)">
+                    </div>
+                </div>
+                <div class="shc-field">
+                    <div class="shc-flabel">Logo Icon</div>
+                    <div class="shc-cpair">
+                        <input type="color" id="shc-logo-icon" value="#08080a" oninput="shcColor('logo-icon',this.value)">
+                        <input type="text"  id="shc-logo-icon-hex" class="shc-hex" value="#08080a" maxlength="7" oninput="shcHex('logo-icon',this.value)">
+                    </div>
+                </div>
+                <div class="shc-field">
+                    <div class="shc-flabel">Text</div>
+                    <div class="shc-cpair">
+                        <input type="color" id="shc-text" value="#ffffff" oninput="shcColor('text',this.value)">
+                        <input type="text"  id="shc-text-hex" class="shc-hex" value="#ffffff" maxlength="7" oninput="shcHex('text',this.value)">
+                    </div>
+                </div>
+                <div class="shc-field">
+                    <div class="shc-flabel">Dim Text</div>
+                    <div class="shc-cpair">
+                        <input type="color" id="shc-text-dim" value="#71717a" oninput="shcColor('text-dim',this.value)">
+                        <input type="text"  id="shc-text-dim-hex" class="shc-hex" value="#71717a" maxlength="7" oninput="shcHex('text-dim',this.value)">
+                    </div>
+                </div>
+            </div>
+
+            <div class="shc-presets">
+                <div class="shc-dot" style="background:#d2d2d2" onclick="shcAccentPreset('#d2d2d2','#08080a')" title="Silver"></div>
+                <div class="shc-dot" style="background:#c8ff00" onclick="shcAccentPreset('#c8ff00','#000')" title="Neon"></div>
+                <div class="shc-dot" style="background:#ff3cac" onclick="shcAccentPreset('#ff3cac','#fff')" title="Pink"></div>
+                <div class="shc-dot" style="background:#00f5d4" onclick="shcAccentPreset('#00f5d4','#000')" title="Mint"></div>
+                <div class="shc-dot" style="background:#ff6b35" onclick="shcAccentPreset('#ff6b35','#000')" title="Fire"></div>
+                <div class="shc-dot" style="background:#a78bfa" onclick="shcAccentPreset('#a78bfa','#fff')" title="Lavender"></div>
+                <div class="shc-dot" style="background:#60a5fa" onclick="shcAccentPreset('#60a5fa','#000')" title="Sky"></div>
+                <div class="shc-dot" style="background:#f59e0b" onclick="shcAccentPreset('#f59e0b','#000')" title="Amber"></div>
+            </div>
+
+            <div class="shc-section">FONT</div>
+            <div class="shc-chips" id="shc-font-chips">
+                <div class="shc-chip active" data-font="'Inter',system-ui,sans-serif" onclick="shcFont(this)" style="font-family:system-ui">Inter</div>
+                <div class="shc-chip" data-font="Georgia,serif" onclick="shcFont(this)" style="font-family:Georgia,serif">Serif</div>
+                <div class="shc-chip" data-font="'Courier New',monospace" onclick="shcFont(this)" style="font-family:monospace">Mono</div>
+                <div class="shc-chip" data-font="cursive" onclick="shcFont(this)" style="font-family:cursive">Script</div>
+            </div>
+
+            <div class="shc-section">TOPBAR</div>
+            <div class="shc-row">
+                <span class="shc-rlabel">Height</span>
+                <input type="range" id="shc-topbar-h" min="60" max="140" value="100" oninput="shcSlider('topbar-h',this.value,'px')">
+                <span class="shc-rval" id="shc-topbar-h-val">100px</span>
+            </div>
+
+            <div class="shc-section">SEARCH BAR</div>
+            <div class="shc-row">
+                <span class="shc-rlabel">Width</span>
+                <input type="range" id="shc-search-w" min="200" max="700" value="380" oninput="shcSlider('search-w',this.value,'px')">
+                <span class="shc-rval" id="shc-search-w-val">380px</span>
+            </div>
+            <div class="shc-row">
+                <span class="shc-rlabel">Radius</span>
+                <input type="range" id="shc-search-radius" min="0" max="40" value="12" oninput="shcSlider('search-radius',this.value,'px')">
+                <span class="shc-rval" id="shc-search-radius-val">12px</span>
+            </div>
+            <div class="shc-row">
+                <span class="shc-rlabel">Btn Radius</span>
+                <input type="range" id="shc-search-btn-r" min="0" max="40" value="8" oninput="shcSlider('search-btn-r',this.value,'px')">
+                <span class="shc-rval" id="shc-search-btn-r-val">8px</span>
+            </div>
+            <div class="shc-sublabel">Search Position</div>
+            <div class="shc-chips" id="shc-pos-chips">
+                <div class="shc-chip active" data-pos="center" onclick="shcSearchPos(this)">Center</div>
+                <div class="shc-chip" data-pos="left" onclick="shcSearchPos(this)">Left</div>
+                <div class="shc-chip" data-pos="right" onclick="shcSearchPos(this)">Right</div>
+            </div>
+
+            <div class="shc-section">SIDEBAR</div>
+            <div class="shc-row">
+                <span class="shc-rlabel">Width</span>
+                <input type="range" id="shc-sidebar-w" min="70" max="200" value="120" oninput="shcSlider('sidebar-w',this.value,'px')">
+                <span class="shc-rval" id="shc-sidebar-w-val">120px</span>
+            </div>
+            <div class="shc-row">
+                <span class="shc-rlabel">Icon Size</span>
+                <input type="range" id="shc-icon-size" min="40" max="90" value="74" oninput="shcSlider('icon-size',this.value,'px')">
+                <span class="shc-rval" id="shc-icon-size-val">74px</span>
+            </div>
+            <div class="shc-row">
+                <span class="shc-rlabel">Icon Radius</span>
+                <input type="range" id="shc-icon-radius" min="0" max="50" value="18" oninput="shcSlider('icon-radius',this.value,'px')">
+                <span class="shc-rval" id="shc-icon-radius-val">18px</span>
+            </div>
+
+            <div class="shc-section">LOGO</div>
+            <div class="shc-row">
+                <span class="shc-rlabel">Size</span>
+                <input type="range" id="shc-logo-size" min="40" max="100" value="74" oninput="shcSlider('logo-size',this.value,'px')">
+                <span class="shc-rval" id="shc-logo-size-val">74px</span>
+            </div>
+            <div class="shc-row">
+                <span class="shc-rlabel">Radius</span>
+                <input type="range" id="shc-logo-radius" min="0" max="50" value="20" oninput="shcSlider('logo-radius',this.value,'px')">
+                <span class="shc-rval" id="shc-logo-radius-val">20px</span>
+            </div>
+
+            <div class="shc-section">AVATAR SHAPE</div>
+            <div class="shc-chips" id="shc-av-chips">
+                <div class="shc-chip active" data-av="15" onclick="shcAvatar(this)">Rounded</div>
+                <div class="shc-chip" data-av="50" onclick="shcAvatar(this)">Circle</div>
+                <div class="shc-chip" data-av="4" onclick="shcAvatar(this)">Sharp</div>
+                <div class="shc-chip" data-av="0" onclick="shcAvatar(this)">Square</div>
+            </div>
+
+            <div class="shc-section">QUICK PRESETS</div>
+            <div class="shc-pbtns">
+                <button class="shc-pbtn" onclick="shcPreset('minimal')">Minimal</button>
+                <button class="shc-pbtn" onclick="shcPreset('rounded')">Rounded</button>
+                <button class="shc-pbtn" onclick="shcPreset('compact')">Compact</button>
+                <button class="shc-pbtn" onclick="shcPreset('wide')">Wide</button>
+            </div>
+        </div>
+
+        <div class="shc-footer">
+            <button class="shc-btn-ghost" onclick="shcReset()">↺ Reset</button>
+            <button class="shc-btn-accent" onclick="shcSave()">💾 Save</button>
+        </div>
+    </div>
+
+    <!-- FRIEND LIST PANEL -->
+    <div id="friend-panel" class="friend-panel hidden">
+
+        <!-- VIEW: FRIENDS -->
+        <div class="fp-view" id="fp-view-friends">
+            <div class="friend-panel-header">
+                <div class="friend-panel-title" onclick="fpOpenProfile()" style="cursor:pointer;" title="View your profile">
+                    <div class="fp-av" id="fp-av">?</div>
+                    <div>
+                        <div class="fp-username" id="fp-username">...</div>
+                        <div class="fp-status">● Online</div>
+                    </div>
+                </div>
+                <button class="friend-panel-close" onclick="closeFriendPanel()">✕</button>
+            </div>
+
+            <div class="friend-panel-tabs">
+                <button class="fp-tab active" id="fp-tab-friends" onclick="fpSetTab('friends',this)">Friends <span class="fp-count" id="fp-friends-count">0</span></button>
+                <button class="fp-tab" id="fp-tab-requests" onclick="fpSetTab('requests',this)">Requests <span class="fp-count fp-count-alert" id="fp-req-count">0</span></button>
+            </div>
+
+            <div class="friend-search-row">
+                <input class="friend-search" id="friend-search" type="text" placeholder="Search friends…" oninput="fpSearch(this.value)">
+            </div>
+
+            <div class="fp-scroll-area">
+                <div class="fp-list" id="fp-friends-list"></div>
+                <div class="fp-list" id="fp-requests-list" style="display:none;"></div>
+            </div>
+
+            <div class="fp-add-row">
+                <input class="friend-search" id="fp-add-input" type="text" placeholder="Add by username…" style="flex:1;">
+                <button class="fp-add-btn" onclick="fpSendRequest()">Add</button>
+            </div>
+        </div>
+
+        <!-- VIEW: PROFILE -->
+        <div class="fp-view" id="fp-view-profile" style="display:none;flex-direction:column;height:100%;">
+            <div class="fpp-topbar">
+                <button class="fp-back-btn" onclick="fpCloseProfile()">← Back</button>
+                <span class="fpp-topbar-title">My Profile</span>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <button class="fpp-customize-btn" id="fpp-customize-toggle" onclick="fppToggleCustomizer()" title="Customize Profile">🎨</button>
+                    <button class="fpp-customize-btn" id="fpp-css-tab-btn" onclick="fppToggleCssEditor()" title="CSS Editor">✦ CSS</button>
+                    <button class="fpp-fullscreen-btn" id="fpp-fs-btn" onclick="fppToggleFullscreen()" title="Fullscreen Profile">⛶</button>
+                    <button class="friend-panel-close" onclick="closeFriendPanel()">✕</button>
+                </div>
+            </div>
+
+            <div class="fpp-banner" id="fpp-banner">
+                <div class="fpp-banner-img-overlay" id="fpp-banner-img-overlay"></div>
+                <div class="fpp-banner-av-wrap">
+                    <div class="fpp-banner-av" id="fpp-banner-av">?</div>
+                    <label class="fpp-av-upload-btn" title="Change avatar">
+                        📷
+                        <input type="file" accept="image/*" style="display:none" onchange="fppUploadAvatar(event)">
+                    </label>
+                </div>
+            </div>
+
+            <div class="fpp-info">
+                <div class="fpp-name" id="fpp-display-name" contenteditable="true" title="Click to edit name">...</div>
+                <div class="fpp-handle" id="fpp-handle">@... · <span style="color:#4ade80">● Online</span></div>
+                <div class="fpp-bio" id="fpp-bio" contenteditable="true" title="Click to edit bio">...</div>
+                <div class="fpp-stats">
+                    <div class="fpp-stat"><span class="fpp-stat-n" id="fpp-posts-count">0</span><span class="fpp-stat-l">Posts</span></div>
+                    <div class="fpp-stat"><span class="fpp-stat-n" id="fpp-friends-stat">0</span><span class="fpp-stat-l">Friends</span></div>
+                    <div class="fpp-stat"><span class="fpp-stat-n">8</span><span class="fpp-stat-l">Servers</span></div>
+                </div>
+            </div>
+
+            <!-- PROFILE CUSTOMIZER PANEL -->
+            <div class="fpp-customizer" id="fpp-customizer" style="display:none;">
+                <div class="fpp-cust-section">ACCENT COLOR</div>
+                <div class="fpp-swatches" id="fpp-swatches">
+                    <div class="fpp-swatch active" data-color="#c8ff00" data-text="#000" style="background:#c8ff00" onclick="fppSetColor(this)"></div>
+                    <div class="fpp-swatch" data-color="#a78bfa" data-text="#fff" style="background:#a78bfa" onclick="fppSetColor(this)"></div>
+                    <div class="fpp-swatch" data-color="#ff3cac" data-text="#fff" style="background:#ff3cac" onclick="fppSetColor(this)"></div>
+                    <div class="fpp-swatch" data-color="#00f5d4" data-text="#000" style="background:#00f5d4" onclick="fppSetColor(this)"></div>
+                    <div class="fpp-swatch" data-color="#ff6b35" data-text="#fff" style="background:#ff6b35" onclick="fppSetColor(this)"></div>
+                    <div class="fpp-swatch" data-color="#60a5fa" data-text="#fff" style="background:#60a5fa" onclick="fppSetColor(this)"></div>
+                    <div class="fpp-swatch" data-color="#f9a8d4" data-text="#000" style="background:#f9a8d4" onclick="fppSetColor(this)"></div>
+                    <div class="fpp-swatch" data-color="#d2d2d2" data-text="#000" style="background:#d2d2d2" onclick="fppSetColor(this)"></div>
+                    <input type="color" class="fpp-color-custom" value="#c8ff00" oninput="fppSetColorCustom(this.value)">
+                </div>
+
+                <div class="fpp-cust-section">BANNER STYLE</div>
+                <div class="fpp-banner-opts">
+                    <div class="fpp-bopt active" data-bg="solid" onclick="fppSetBanner(this)">Solid</div>
+                    <div class="fpp-bopt" data-bg="gradient" onclick="fppSetBanner(this)">Gradient</div>
+                    <div class="fpp-bopt" data-bg="grid" onclick="fppSetBanner(this)">Grid</div>
+                    <div class="fpp-bopt" data-bg="dots" onclick="fppSetBanner(this)">Dots</div>
+                    <div class="fpp-bopt" data-bg="image" onclick="fppSetBanner(this)">Image</div>
+                </div>
+
+                <div class="fpp-cust-row" id="fpp-banner-img-row" style="display:none;">
+                    <label class="fpp-upload-label">
+                        📁 Upload Banner Image
+                        <input type="file" accept="image/*" style="display:none" onchange="fppUploadBanner(event)">
+                    </label>
+                    <button class="fpp-small-btn" onclick="fppClearBanner()">Clear</button>
+                </div>
+
+                <div class="fpp-cust-section">PROFILE BACKGROUND</div>
+                <div class="fpp-banner-opts" id="fpp-bg-opts">
+                    <div class="fpp-bopt active" data-pbg="dark" onclick="fppSetProfileBg(this)">Dark</div>
+                    <div class="fpp-bopt" data-pbg="darker" onclick="fppSetProfileBg(this)">Darker</div>
+                    <div class="fpp-bopt" data-pbg="light" onclick="fppSetProfileBg(this)">Light</div>
+                    <div class="fpp-bopt" data-pbg="accent" onclick="fppSetProfileBg(this)">Accent</div>
+                    <div class="fpp-bopt" data-pbg="image" onclick="fppSetProfileBg(this)">Image</div>
+                </div>
+                <div class="fpp-cust-row" id="fpp-bg-img-row" style="display:none;">
+                    <label class="fpp-upload-label">
+                        📁 Upload Background
+                        <input type="file" accept="image/*" style="display:none" onchange="fppUploadProfileBg(event)">
+                    </label>
+                    <button class="fpp-small-btn" onclick="fppClearProfileBg()">Clear</button>
+                </div>
+
+                <div class="fpp-cust-section">FONT SIZE</div>
+                <div class="fpp-cust-row">
+                    <input type="range" id="fpp-font-size" min="12" max="20" value="14" oninput="fppSetFontSize(this.value)" style="flex:1;">
+                    <span class="fpp-range-val" id="fpp-font-size-val">14px</span>
+                </div>
+
+                <div class="fpp-cust-section">FONT STYLE</div>
+                <div class="fpp-banner-opts" id="fpp-font-opts">
+                    <div class="fpp-bopt active" data-ff="inter" onclick="fppSetFont(this)">Inter</div>
+                    <div class="fpp-bopt" data-ff="serif" onclick="fppSetFont(this)">Serif</div>
+                    <div class="fpp-bopt" data-ff="mono" onclick="fppSetFont(this)">Mono</div>
+                    <div class="fpp-bopt" data-ff="script" onclick="fppSetFont(this)">Script</div>
+                </div>
+            </div>
+
+            <!-- CSS EDITOR PANEL -->
+            <div id="fpp-css-editor-wrap" class="fpp-css-editor-wrap" style="display:none;">
+                <div class="fpp-css-topbar">
+                    <span class="fpp-css-label">✦ CSS <span style="opacity:0.4;font-weight:400;">· applies to your profile</span></span>
+                    <div style="display:flex;gap:6px;">
+                        <button class="fpp-css-btn fpp-css-reset" onclick="fppResetCss()">↺ Reset</button>
+                        <button class="fpp-css-btn fpp-css-apply" onclick="fppApplyCss()">▲ Apply</button>
+                    </div>
+                </div>
+                <textarea id="fpp-css-textarea" class="fpp-css-textarea" spellcheck="false" placeholder="/* Write CSS here... */"></textarea>
+                <div class="fpp-css-hints">
+                    <span>.fpp-name</span>
+                    <span>.fpp-bio</span>
+                    <span>.fpp-banner</span>
+                    <span>.fpp-post</span>
+                    <span>.fpp-feed</span>
+                    <span>.fpp-stats</span>
+                    <span>.fpp-composer</span>
+                </div>
+            </div>
+            <div id="fpp-css-toast" class="fpp-css-toast">✓ CSS Applied</div>
+
+            <!-- Post composer -->
+            <div class="fpp-composer">
+                <div class="fpp-compose-media-preview" id="fpp-compose-preview" style="display:none;"></div>
+                <textarea id="fpp-compose-input" class="fpp-compose-input" placeholder="Share something…" rows="2"></textarea>
+                <div class="fpp-compose-toolbar">
+                    <div class="fpp-compose-tools">
+                        <label class="fpp-tool-btn" title="Photo">
+                            🖼
+                            <input type="file" accept="image/*" style="display:none" onchange="fppAttachMedia(event,'image')">
+                        </label>
+                        <label class="fpp-tool-btn" title="Video">
+                            🎬
+                            <input type="file" accept="video/*" style="display:none" onchange="fppAttachMedia(event,'video')">
+                        </label>
+                        <label class="fpp-tool-btn" title="Audio">
+                            🎵
+                            <input type="file" accept="audio/*" style="display:none" onchange="fppAttachMedia(event,'audio')">
+                        </label>
+                        <label class="fpp-tool-btn" title="File">
+                            📎
+                            <input type="file" style="display:none" onchange="fppAttachMedia(event,'file')">
+                        </label>
+                    </div>
+                    <button class="fpp-post-btn" onclick="fppPost()">Post</button>
+                </div>
+            </div>
+
+            <!-- Profile posts feed -->
+            <div class="fpp-feed" id="fpp-feed"></div>
+        </div>
+
+    </div>
+    <div id="friend-panel-backdrop" class="friend-panel-backdrop hidden"></div>
+
+    <!-- PROFILE FULLSCREEN OVERLAY -->
+    <div id="fpp-fullscreen-overlay" class="fpp-fullscreen-overlay hidden" onclick="fppToggleFullscreen()"></div>
+
+    <!-- AUTH MODAL -->
+    <div id="auth-overlay" class="auth-overlay hidden">
+      <div class="auth-box">
+        <div class="auth-logo">⧡ Branch</div>
+        <div class="auth-tabs">
+          <button class="auth-tab active" onclick="switchAuthTab('login', event)">Login</button>
+          <button class="auth-tab" onclick="switchAuthTab('register', event)">Register</button>
+        </div>
+        <div id="auth-login" class="auth-form">
+          <input id="login-username" class="auth-input" type="text" placeholder="Username">
+          <input id="login-password" class="auth-input" type="password" placeholder="Password">
+          <div id="login-error" class="auth-error"></div>
+          <button class="auth-btn" onclick="doLogin()">Login</button>
+        </div>
+        <div id="auth-register" class="auth-form" style="display:none;">
+          <input id="reg-username" class="auth-input" type="text" placeholder="Username">
+          <input id="reg-displayname" class="auth-input" type="text" placeholder="Display name (optional)">
+          <input id="reg-password" class="auth-input" type="password" placeholder="Password">
+          <input id="reg-password2" class="auth-input" type="password" placeholder="Confirm password">
+          <div id="reg-error" class="auth-error"></div>
+          <button class="auth-btn" onclick="doRegister()">Create Account</button>
+        </div>
+      </div>
     </div>
 
     <script src="branch.js"></script>
